@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <title>Temperatura Ambiente — Datalog</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,Ubuntu; margin:24px; color:#111}
+    .card{max-width:980px; margin:auto; padding:16px 20px; border:1px solid #e5e7eb; border-radius:16px; box-shadow:0 2px 12px rgba(0,0,0,.05)}
+    h1{margin:0 0 8px 0}
+    .muted{color:#6b7280; font-size:14px}
+    .kpi{font-size:48px; font-weight:700; margin:6px 0}
+    .actions{margin:10px 0 6px 0; display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+    .btn{display:inline-block; padding:8px 14px; border-radius:10px; border:1px solid #d1d5db; background:#f8fafc; cursor:pointer; text-decoration:none; color:#111}
+    .btn:hover{background:#eef2f7}
+    canvas{max-height:420px}
+  </style>
+  <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <div class="card">
+    <h1>Temperatura Ambiente</h1>
+    <div class="muted">Atualiza automaticamente (~10s). Leituras a cada 1 min.</div>
+
+    <div class="kpi" id="kpiTemp">—</div>
+    <div class="muted" id="kpiInfo">Última leitura: —</div>
+
+    <div class="actions">
+      <a id="exportBtn" class="btn" href="/api/v1/export.csv" download="datalog.csv">Exportar CSV</a>
+    </div>
+
+    <canvas id="chart" style="margin-top:8px"></canvas>
+  </div>
+
+  <script>
+    const kpiTemp = document.getElementById('kpiTemp');
+    const kpiInfo = document.getElementById('kpiInfo');
+    const exportBtn = document.getElementById('exportBtn');
+
+    // Nome de arquivo com data (opcional)
+    const pad2 = (n)=>String(n).padStart(2,'0');
+    const now = new Date();
+    const fname = `datalog-${now.getFullYear()}${pad2(now.getMonth()+1)}${pad2(now.getDate())}.csv`;
+    exportBtn.setAttribute('download', fname);
+
+    let chart = null;
+    window.addEventListener('load', async () => {
+      if (typeof Chart !== 'undefined') {
+        chart = new Chart(document.getElementById('chart'), {
+          type: 'line',
+          data: { datasets: [{ label: 'Temperatura (°C)', data: [] }] },
+          options: {
+            animation: false,
+            parsing: false,
+            normalized: true,
+            scales: {
+              x: {
+                type: 'linear',
+                ticks: {
+                  callback: (value) => {
+                    const d = new Date(Number(value));
+                    return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+                  }
+                },
+                title: { display: true, text: 'Horário' }
+              },
+              y: { title: { display: true, text: '°C' } }
+            },
+            plugins: { legend: { display: true } }
+          }
+        });
+      }
+
+      async function refresh(){
+        try {
+          // Série agregada (usa endpoint que já existe no backend)
+          const res = await fetch('/api/v1/readings/aggregate?limit=240', { cache: 'no-store' });
+          if (res.ok) {
+            const series = await res.json();
+            if (chart) {
+              const data = series
+                .filter(r => r.epoch_ms && r.temperature_c != null)
+                .map(r => ({ x: Number(r.epoch_ms), y: Number(r.temperature_c) }));
+              chart.data.datasets[0].data = data;
+              chart.update();
+            }
+          }
+        } catch {}
+
+        try {
+          // Última leitura (KPI)
+          const res2 = await fetch('/api/v1/readings/latest', { cache: 'no-store' });
+          if (res2.ok) {
+            const last = await res2.json();
+            if (last && last.ts) {
+              kpiTemp.textContent = `${Number(last.temperature_c).toFixed(1)} °C`;
+              kpiInfo.textContent = `Última leitura: ${new Date(last.ts).toLocaleString()}`;
+            }
+          }
+        } catch {}
+      }
+
+      await refresh();
+      setInterval(refresh, 10000);
+    });
+  </script>
+</body>
+</html>

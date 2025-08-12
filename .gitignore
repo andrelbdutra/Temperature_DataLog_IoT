@@ -1,0 +1,25 @@
+# Bytecode / cache
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pytest_cache/
+*.ruff_cache/
+.mypy_cache/
+.pytype/
+
+# Ambientes virtuais
+.venv/
+venv/
+env/
+ENV/
+
+# Editor/IDE
+.vscode/
+.idea/
+
+# Banco local (datalog gerado em runtime)
+datalog.db
+*.sqlite
+*.sqlite3
+
